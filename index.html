@@ -1,0 +1,1787 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#152030" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="教室収支" />
+<link rel="manifest" href="./manifest.json" />
+<link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+<link rel="icon" href="./icon-192.png" />
+<title>教室収支マネジメント</title>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/prop-types@15/prop-types.js" crossorigin></script>
+<script src="https://unpkg.com/recharts@2/umd/Recharts.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js" crossorigin></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+  html, body { background:#f8fafc; overscroll-behavior-y: none; }
+  * { -webkit-tap-highlight-color: transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+  #splash {
+    position: fixed; inset: 0; background:#152030; color:#fff; display:flex;
+    flex-direction:column; align-items:center; justify-content:center; gap:12px;
+    font-family: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif; z-index: 9999;
+    transition: opacity .3s ease;
+  }
+  #splash.hide { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="splash">
+  <div style="font-size:15px;font-weight:700;">教室収支マネジメント</div>
+  <div style="font-size:12px;color:#94a3b8;">読み込み中…</div>
+</div>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react,stage-3">
+const { useState, useEffect, useMemo, useCallback } = React;
+const {
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell, Legend, ReferenceLine
+} = Recharts;
+
+/* ============================================================
+   アイコン（外部依存なしの軽量SVGアイコン集）
+   ============================================================ */
+function makeIcon(children) {
+  return function IconComp({ size = 16, className = "", style }) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+        {children}
+      </svg>
+    );
+  };
+}
+
+const LayoutDashboard = makeIcon(<><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></>);
+const ListChecks = makeIcon(<><path d="M3 6l1.5 1.5L7 5" /><path d="M3 12l1.5 1.5L7 11" /><path d="M3 18l1.5 1.5L7 17" /><path d="M11 6h10M11 12h10M11 18h10" /></>);
+const PlusCircle = makeIcon(<><circle cx="12" cy="12" r="9" /><path d="M12 8v8M8 12h8" /></>);
+const BarChart3 = makeIcon(<><path d="M3 3v18h18" /><rect x="7" y="13" width="3" height="5" /><rect x="12" y="9" width="3" height="9" /><rect x="17" y="5" width="3" height="13" /></>);
+const SlidersHorizontal = makeIcon(<><path d="M4 6h4M12 6h8" /><path d="M4 12h10M18 12h2" /><path d="M4 18h4M12 18h8" /><circle cx="9" cy="6" r="1.8" /><circle cx="15" cy="12" r="1.8" /><circle cx="9" cy="18" r="1.8" /></>);
+const Settings = makeIcon(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" /></>);
+const TrendingUp = makeIcon(<><path d="M3 17l6-6 4 4 8-8" /><path d="M17 7h4v4" /></>);
+const TrendingDown = makeIcon(<><path d="M3 7l6 6 4-4 8 8" /><path d="M17 17h4v-4" /></>);
+const Minus = makeIcon(<path d="M5 12h14" />);
+const Search = makeIcon(<><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>);
+const Download = makeIcon(<><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M5 21h14" /></>);
+const Upload = makeIcon(<><path d="M12 15V3" /><path d="M7 8l5-5 5 5" /><path d="M5 21h14" /></>);
+const X = makeIcon(<><path d="M18 6L6 18" /><path d="M6 6l12 12" /></>);
+const ChevronRight = makeIcon(<path d="M9 6l6 6-6 6" />);
+const AlertTriangle = makeIcon(<><path d="M12 3l10 18H2z" /><path d="M12 9v5" /><path d="M12 17h.01" /></>);
+const CheckCircle2 = makeIcon(<><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 5-5" /></>);
+const Menu = makeIcon(<path d="M4 6h16M4 12h16M4 18h16" />);
+const Trash2 = makeIcon(<><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /></>);
+const Pencil = makeIcon(<><path d="M3 21l4-1 12-12-3-3L4 17z" /></>);
+const ArrowUpRight = makeIcon(<><path d="M7 17L17 7" /><path d="M8 7h9v9" /></>);
+const ArrowDownRight = makeIcon(<><path d="M7 7l10 10" /><path d="M17 8v9H8" /></>);
+const Info = makeIcon(<><circle cx="12" cy="12" r="9" /><path d="M12 8h.01" /><path d="M11 12h1v5h1" /></>);
+const Sparkles = makeIcon(<><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></>);
+const Trophy = makeIcon(<><path d="M8 4h8v4a4 4 0 01-8 0z" /><path d="M8 5H5a3 3 0 003 3" /><path d="M16 5h3a3 3 0 01-3 3" /><path d="M12 12v4" /><path d="M9 20h6" /><path d="M10 16h4v2a2 2 0 01-2 2 2 2 0 01-2-2z" /></>);
+
+
+/* ============================================================
+   定数・ユーティリティ
+   ============================================================ */
+
+const CATEGORIES = ["スポーツ教室", "健康教室", "親子教室", "子ども教室", "文化教室", "その他"];
+const STORAGE_KEY = "records-v1";
+
+const yen = (v) => {
+  if (v === null || v === undefined || Number.isNaN(v) || !Number.isFinite(v)) return "—";
+  return "¥" + Math.round(v).toLocaleString("ja-JP");
+};
+const yenSigned = (v) => {
+  if (v === null || v === undefined || Number.isNaN(v) || !Number.isFinite(v)) return "—";
+  const s = v >= 0 ? "+" : "-";
+  return s + "¥" + Math.abs(Math.round(v)).toLocaleString("ja-JP");
+};
+const pct = (v, digits = 1) => {
+  if (v === null || v === undefined || Number.isNaN(v) || !Number.isFinite(v)) return "—";
+  return v.toFixed(digits) + "%";
+};
+const pctSigned = (v, digits = 1) => {
+  if (v === null || v === undefined || Number.isNaN(v) || !Number.isFinite(v)) return "—";
+  return (v >= 0 ? "+" : "") + v.toFixed(digits) + "%";
+};
+const monthLabel = (m) => `${m}月`;
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+// 会計年度 (4月始まり)
+function fiscalYearOf(year, month) {
+  return month >= 4 ? year : year - 1;
+}
+
+/* ============================================================
+   計算ロジック（仕様書 8〜9章）
+   ============================================================ */
+
+function extraExpenseTotal(e) {
+  return (e.customExpenses || []).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+}
+function calcBaseRevenue(e) {
+  return (Number(e.participationFee) || 0) * (Number(e.participants) || 0);
+}
+function calcTotalRevenue(e) {
+  return calcBaseRevenue(e) + (Number(e.otherRevenue) || 0);
+}
+function calcTotalExpenses(e) {
+  return (
+    (Number(e.instructorFee) || 0) +
+    (Number(e.venueCost) || 0) +
+    (Number(e.materialCost) || 0) +
+    (Number(e.advertisingCost) || 0) +
+    (Number(e.equipmentCost) || 0) +
+    (Number(e.otherExpense) || 0) +
+    extraExpenseTotal(e)
+  );
+}
+function calcProfit(e) {
+  return calcTotalRevenue(e) - calcTotalExpenses(e);
+}
+function calcProfitMargin(e) {
+  const r = calcTotalRevenue(e);
+  if (r === 0) return null;
+  return (calcProfit(e) / r) * 100;
+}
+function calcOccupancy(e) {
+  const cap = Number(e.capacity) || 0;
+  if (cap === 0) return null;
+  return ((Number(e.participants) || 0) / cap) * 100;
+}
+function calcRevenuePerParticipant(e) {
+  const p = Number(e.participants) || 0;
+  if (p === 0) return null;
+  return calcTotalRevenue(e) / p;
+}
+function calcProfitPerParticipant(e) {
+  const p = Number(e.participants) || 0;
+  if (p === 0) return null;
+  return calcProfit(e) / p;
+}
+function calcBreakEven(e) {
+  const fee = Number(e.participationFee) || 0;
+  const fixed = calcTotalExpenses(e) - (Number(e.otherRevenue) || 0) * 0; // MVP: 全経費を固定費として扱う
+  const fixedCosts = calcTotalExpenses(e);
+  if (fee <= 0) return { status: "unknown" };
+  const needed = Math.ceil(fixedCosts / fee);
+  const cap = Number(e.capacity) || Infinity;
+  if (calcProfit(e) > 0) return { status: "already", needed: 0 };
+  if (needed > cap) return { status: "impossible", needed };
+  return { status: "needed", needed, gap: Math.max(0, needed - (Number(e.participants) || 0)) };
+}
+function statusOf(e) {
+  const p = calcProfit(e);
+  if (p > 0) return "黒字";
+  if (p < 0) return "赤字";
+  return "損益分岐";
+}
+function statusColor(status) {
+  if (status === "黒字") return { text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-300", dot: "bg-emerald-500" };
+  if (status === "赤字") return { text: "text-rose-700", bg: "bg-rose-50", border: "border-rose-300", dot: "bg-rose-500" };
+  return { text: "text-amber-700", bg: "bg-amber-50", border: "border-amber-300", dot: "bg-amber-500" };
+}
+
+/* ============================================================
+   サンプルデータ
+   ============================================================ */
+
+function buildSampleData() {
+  const rows = [];
+  const push = (obj) => rows.push({
+    id: uid(),
+    otherRevenue: 0, materialCost: 0, advertisingCost: 0, equipmentCost: 0, otherExpense: 0,
+    customExpenses: [], notes: "", numberOfSessions: 4, date: "", dayOfWeek: "土", startTime: "10:00", endTime: "11:00",
+    ...obj,
+  });
+
+  // 1. フットサル教室: 増加傾向・高稼働・黒字
+  const futsal = [
+    [4, 12, 3000, 8000, 6000], [5, 14, 3000, 8000, 6000],
+    [6, 16, 3000, 8000, 6500], [7, 18, 3000, 8000, 6500], [8, 19, 3000, 9000, 7000],
+  ];
+  futsal.forEach(([m, p, fee, instr, venue]) => push({
+    className: "フットサル教室", category: "スポーツ教室", instructor: "田中コーチ",
+    year: 2026, month: m, capacity: 20, participationFee: fee, participants: p,
+    instructorFee: instr, venueCost: venue,
+  }));
+
+  // 2. ヨガ教室: 安定黒字
+  const yoga = [
+    [4, 10, 2500, 6000, 3000], [5, 11, 2500, 6000, 3000],
+    [6, 10, 2500, 6000, 3000], [7, 12, 2500, 6000, 3200], [8, 11, 2500, 6000, 3200],
+  ];
+  yoga.forEach(([m, p, fee, instr, venue]) => push({
+    className: "ヨガ教室", category: "健康教室", instructor: "鈴木インストラクター",
+    year: 2026, month: m, capacity: 15, participationFee: fee, participants: p,
+    instructorFee: instr, venueCost: venue,
+  }));
+
+  // 3. 親子スポーツ教室: 参加人数が継続的に減少 → 赤字化
+  const oyako = [
+    [4, 10, 2000, 7000, 3000], [5, 8, 2000, 7000, 3000],
+    [6, 6, 2000, 7000, 3000], [7, 5, 2000, 7000, 3200], [8, 4, 2000, 7000, 3200],
+  ];
+  oyako.forEach(([m, p, fee, instr, venue]) => push({
+    className: "親子スポーツ教室", category: "親子教室", instructor: "佐藤コーチ",
+    year: 2026, month: m, capacity: 12, participationFee: fee, participants: p,
+    instructorFee: instr, venueCost: venue,
+  }));
+
+  // 4. 初心者向け運動教室: 低稼働率・赤字
+  const beginner = [
+    [4, 7, 1500, 9000, 4000], [5, 8, 1500, 9000, 4000],
+    [6, 7, 1500, 9000, 4000], [7, 9, 1500, 9000, 4200], [8, 8, 1500, 9000, 4200],
+  ];
+  beginner.forEach(([m, p, fee, instr, venue]) => push({
+    className: "初心者向け運動教室", category: "健康教室", instructor: "高橋インストラクター",
+    year: 2026, month: m, capacity: 25, participationFee: fee, participants: p,
+    instructorFee: instr, venueCost: venue,
+  }));
+
+  // 5. 子どもスポーツ教室: 高稼働だが講師費が高く利益率は低い（29章の重要な示唆）
+  const kids = [
+    [4, 15, 2800, 18000, 4000], [5, 16, 2800, 18000, 4000],
+    [6, 17, 2800, 19000, 4200], [7, 17, 2800, 19000, 4200], [8, 18, 2800, 19000, 4200],
+  ];
+  kids.forEach(([m, p, fee, instr, venue]) => push({
+    className: "子どもスポーツ教室", category: "子ども教室", instructor: "山本コーチ",
+    year: 2026, month: m, capacity: 18, participationFee: fee, participants: p,
+    instructorFee: instr, venueCost: venue,
+  }));
+
+  return rows;
+}
+
+/* ============================================================
+   ストレージ（window.storage を使用。localStorage は使用不可のため）
+   ============================================================ */
+
+async function loadRecords() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (err) {
+    // 初回起動、またはストレージ読み取り不可
+  }
+  return null;
+}
+async function saveRecords(records) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    return true;
+  } catch (err) {
+    console.error("保存に失敗しました", err);
+    return false;
+  }
+}
+
+/* ============================================================
+   小コンポーネント
+   ============================================================ */
+
+function StatusBadge({ status, size = "md" }) {
+  const c = statusColor(status);
+  const sizeCls = size === "sm" ? "text-[11px] px-2 py-0.5" : "text-xs px-2.5 py-1";
+  const Icon = status === "黒字" ? CheckCircle2 : status === "赤字" ? AlertTriangle : Minus;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border font-semibold ${c.text} ${c.bg} ${c.border} ${sizeCls}`}>
+      <Icon size={size === "sm" ? 12 : 14} />
+      {status}
+    </span>
+  );
+}
+
+function KpiCard({ label, value, sub, icon: Icon, accent = "slate" }) {
+  const accents = {
+    slate: "text-slate-700 bg-slate-100",
+    emerald: "text-emerald-700 bg-emerald-100",
+    rose: "text-rose-700 bg-rose-100",
+    amber: "text-amber-700 bg-amber-100",
+    indigo: "text-indigo-700 bg-indigo-100",
+  };
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2 min-w-0">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-medium text-slate-500">{label}</span>
+        {Icon && (
+          <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${accents[accent]}`}>
+            <Icon size={15} />
+          </span>
+        )}
+      </div>
+      <div className="text-2xl font-bold text-slate-900 tabular-nums truncate">{value}</div>
+      {sub && <div className="text-xs text-slate-500 tabular-nums">{sub}</div>}
+    </div>
+  );
+}
+
+function ChangeTag({ value, digits = 1, isPoint = false }) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return <span className="text-slate-400 text-xs font-medium">—</span>;
+  }
+  const up = value > 0;
+  const flat = value === 0;
+  const Icon = flat ? Minus : up ? ArrowUpRight : ArrowDownRight;
+  const cls = flat ? "text-slate-500 bg-slate-100" : up ? "text-emerald-700 bg-emerald-50" : "text-rose-700 bg-rose-50";
+  const suffix = isPoint ? "ポイント" : "%";
+  return (
+    <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums ${cls}`}>
+      <Icon size={12} />
+      {(value >= 0 ? "+" : "") + value.toFixed(digits)}{suffix}
+    </span>
+  );
+}
+
+function EmptyState({ onAdd }) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-24 px-6">
+      <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+        <ListChecks className="text-slate-400" size={28} />
+      </div>
+      <h3 className="text-lg font-bold text-slate-800 mb-1">まだ教室データが登録されていません</h3>
+      <p className="text-sm text-slate-500 mb-6">教室を登録すると、収支ダッシュボードや分析機能が使えるようになります。</p>
+      <button onClick={onAdd} className="inline-flex items-center gap-2 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors">
+        <PlusCircle size={16} /> 最初の教室を登録する
+      </button>
+    </div>
+  );
+}
+
+function Field({ label, required, error, children, hint }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold text-slate-600">
+        {label} {required && <span className="text-rose-500">必須</span>}
+      </label>
+      {children}
+      {hint && !error && <span className="text-[11px] text-slate-400">{hint}</span>}
+      {error && <span className="text-[11px] text-rose-600 font-medium">{error}</span>}
+    </div>
+  );
+}
+
+const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white";
+
+/* ============================================================
+   自動分析・改善ポイント（14〜15章）
+   ============================================================ */
+
+function buildAutoAnalysis(records, entry, prevEntry) {
+  const notes = [];
+  const occ = calcOccupancy(entry);
+  const margin = calcProfitMargin(entry);
+  const be = calcBreakEven(entry);
+
+  if (prevEntry) {
+    const prevP = Number(prevEntry.participants) || 0;
+    if (prevP > 0) {
+      const diff = ((entry.participants - prevP) / prevP) * 100;
+      if (Math.abs(diff) >= 5) {
+        notes.push(`参加人数が前月比${diff >= 0 ? diff.toFixed(0) + "%増加" : Math.abs(diff).toFixed(0) + "%減少"}しています。`);
+      }
+    }
+  }
+  if (occ !== null && occ >= 85) {
+    notes.push(`${entry.className}は定員充足率${occ.toFixed(0)}%で、非常に高い参加率です。`);
+  } else if (occ !== null && occ < 40) {
+    notes.push(`${entry.className}は参加率が${occ.toFixed(0)}%に留まっており、集客改善の余地があります。`);
+  }
+  if (calcProfit(entry) < 0) {
+    if (be.status === "needed") {
+      notes.push(`${entry.className}は現在赤字です。あと${be.gap}名の参加で損益分岐点に到達します。`);
+    } else if (be.status === "impossible") {
+      notes.push(`${entry.className}は現在赤字で、定員内では黒字化できません。参加費や経費の見直しが必要です。`);
+    } else {
+      notes.push(`${entry.className}は現在赤字です。参加人数・参加費・経費のバランスを確認してください。`);
+    }
+  }
+  if (prevEntry) {
+    const prevP = Number(prevEntry.participants) || 0;
+    const prevMargin = calcProfitMargin(prevEntry);
+    if (entry.participants > prevP && margin !== null && prevMargin !== null && margin < prevMargin - 3) {
+      notes.push(`${entry.className}は参加人数が増加している一方、利益率が低下しています。支出の増加を確認してください。`);
+    }
+  }
+  return notes;
+}
+
+function buildImprovementPoints(entry, decliningStreak) {
+  const points = [];
+  const occ = calcOccupancy(entry);
+  const margin = calcProfitMargin(entry);
+  const profit = calcProfit(entry);
+
+  if (occ !== null && occ < 50) {
+    points.push({ type: "warn", text: "定員充足率が低いため、集客施策を検討してください。" });
+  }
+  if (occ !== null && occ >= 80) {
+    points.push({ type: "good", text: "参加率が高いため、定員増加や開催回数増加を検討できる可能性があります。" });
+  }
+  if (profit < 0) {
+    points.push({ type: "bad", text: "赤字となっています。参加人数・参加費・経費の見直しを検討してください。" });
+  }
+  if (decliningStreak >= 2) {
+    points.push({ type: "warn", text: "参加人数が継続的に減少しています。" });
+  }
+  if (margin !== null && margin >= 40) {
+    points.push({ type: "good", text: "収益性の高い教室です。類似教室への展開を検討できます。" });
+  }
+  return points;
+}
+
+/* ============================================================
+   ナビゲーション定義
+   ============================================================ */
+
+const NAV_ITEMS = [
+  { key: "dashboard", label: "ダッシュボード", icon: LayoutDashboard },
+  { key: "list", label: "教室一覧", icon: ListChecks },
+  { key: "entry", label: "データ入力", icon: PlusCircle },
+  { key: "analysis", label: "分析", icon: BarChart3 },
+  { key: "simulation", label: "シミュレーション", icon: SlidersHorizontal },
+  { key: "settings", label: "設定", icon: Settings },
+];
+
+/* ============================================================
+   メインアプリ
+   ============================================================ */
+
+function App() {
+  const [records, setRecords] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [page, setPage] = useState("dashboard");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState(null); // データ入力画面で編集中のレコード
+  const [selectedClassName, setSelectedClassName] = useState(null); // 詳細ページ
+  const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
+
+  const [filters, setFilters] = useState({
+    fiscalYear: "all", month: "all", className: "all", category: "all", instructor: "all",
+  });
+  const [search, setSearch] = useState("");
+
+  // 初回ロード
+  useEffect(() => {
+    (async () => {
+      const stored = await loadRecords();
+      if (stored && Array.isArray(stored) && stored.length > 0) {
+        setRecords(stored);
+      } else {
+        const sample = buildSampleData();
+        setRecords(sample);
+        await saveRecords(sample);
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  // 変更を保存
+  const persist = useCallback(async (next) => {
+    setSaveState("saving");
+    const ok = await saveRecords(next);
+    setSaveState(ok ? "saved" : "idle");
+    if (ok) setTimeout(() => setSaveState("idle"), 1500);
+  }, []);
+
+  const updateRecords = useCallback((updater) => {
+    setRecords((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
+  const allClassNames = useMemo(() => Array.from(new Set(records.map((r) => r.className))).sort(), [records]);
+  const allInstructors = useMemo(() => Array.from(new Set(records.map((r) => r.instructor).filter(Boolean))).sort(), [records]);
+  const allFiscalYears = useMemo(() => Array.from(new Set(records.map((r) => fiscalYearOf(r.year, r.month)))).sort(), [records]);
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((r) => {
+      if (filters.fiscalYear !== "all" && fiscalYearOf(r.year, r.month) !== Number(filters.fiscalYear)) return false;
+      if (filters.month !== "all" && r.month !== Number(filters.month)) return false;
+      if (filters.className !== "all" && r.className !== filters.className) return false;
+      if (filters.category !== "all" && r.category !== filters.category) return false;
+      if (filters.instructor !== "all" && r.instructor !== filters.instructor) return false;
+      if (search.trim() && !r.className.includes(search.trim())) return false;
+      return true;
+    });
+  }, [records, filters, search]);
+
+  const goToEntry = (record) => {
+    setEditingRecord(record || null);
+    setPage("entry");
+    setMobileNavOpen(false);
+  };
+  const goToDetail = (className) => {
+    setSelectedClassName(className);
+    setPage("detail");
+  };
+
+  const deleteRecord = (id) => {
+    updateRecords((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400 text-sm">
+        読み込み中…
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex" style={{ fontFamily: "'Hiragino Sans','Noto Sans JP','Yu Gothic',sans-serif" }}>
+      {/* サイドバー（デスクトップ） */}
+      <aside className="hidden md:flex md:flex-col w-60 shrink-0 bg-[#152030] text-slate-200 min-h-screen sticky top-0">
+        <div className="px-5 py-5 border-b border-white/10">
+          <div className="text-[15px] font-bold text-white leading-tight">教室収支<br />マネジメント</div>
+          <div className="text-[11px] text-slate-400 mt-1">公共スポーツ施設向け</div>
+        </div>
+        <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => { setPage(item.key); setEditingRecord(null); }}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                page === item.key || (page === "detail" && item.key === "list")
+                  ? "bg-teal-600 text-white"
+                  : "text-slate-300 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <item.icon size={17} />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="px-5 py-4 border-t border-white/10 text-[11px] text-slate-500">
+          {saveState === "saving" ? "保存中…" : saveState === "saved" ? "保存済み" : "自動保存"}
+        </div>
+      </aside>
+
+      {/* モバイルヘッダー */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 bg-[#152030] text-white flex items-center justify-between px-4 h-14">
+        <div className="font-bold text-sm">教室収支マネジメント</div>
+        <button onClick={() => setMobileNavOpen((v) => !v)} className="p-1.5">
+          <Menu size={22} />
+        </button>
+      </div>
+      {mobileNavOpen && (
+        <div className="md:hidden fixed inset-0 z-20 bg-black/40" onClick={() => setMobileNavOpen(false)}>
+          <div className="absolute top-14 inset-x-0 bg-[#152030] text-slate-200 p-3 flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => { setPage(item.key); setEditingRecord(null); setMobileNavOpen(false); }}
+                className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium ${
+                  page === item.key ? "bg-teal-600 text-white" : "text-slate-300 hover:bg-white/5"
+                }`}
+              >
+                <item.icon size={17} />
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* メインコンテンツ */}
+      <main className="flex-1 min-w-0 pt-14 md:pt-0">
+        <div className="max-w-6xl mx-auto p-4 md:p-8">
+          {records.length === 0 && page !== "entry" ? (
+            <EmptyState onAdd={() => goToEntry(null)} />
+          ) : (
+            <>
+              {page === "dashboard" && (
+                <DashboardPage
+                  records={records}
+                  filteredRecords={filteredRecords}
+                  filters={filters} setFilters={setFilters}
+                  allClassNames={allClassNames} allInstructors={allInstructors} allFiscalYears={allFiscalYears}
+                  onSelectClass={goToDetail}
+                  onAdd={() => goToEntry(null)}
+                />
+              )}
+              {page === "list" && (
+                <ClassListPage
+                  records={records} filteredRecords={filteredRecords}
+                  filters={filters} setFilters={setFilters} search={search} setSearch={setSearch}
+                  allClassNames={allClassNames} allInstructors={allInstructors} allFiscalYears={allFiscalYears}
+                  onEdit={goToEntry} onDelete={deleteRecord} onSelectClass={goToDetail}
+                  onAdd={() => goToEntry(null)}
+                />
+              )}
+              {page === "entry" && (
+                <EntryPage
+                  editingRecord={editingRecord}
+                  allClassNames={allClassNames} allInstructors={allInstructors}
+                  onCancel={() => { setEditingRecord(null); setPage("list"); }}
+                  onSave={(rec) => {
+                    updateRecords((prev) => {
+                      const exists = prev.some((r) => r.id === rec.id);
+                      return exists ? prev.map((r) => (r.id === rec.id ? rec : r)) : [...prev, rec];
+                    });
+                    setEditingRecord(null);
+                    setPage("list");
+                  }}
+                />
+              )}
+              {page === "analysis" && (
+                <AnalysisPage
+                  records={records} filteredRecords={filteredRecords}
+                  filters={filters} setFilters={setFilters}
+                  allClassNames={allClassNames} allInstructors={allInstructors} allFiscalYears={allFiscalYears}
+                />
+              )}
+              {page === "simulation" && <SimulationPage records={records} allClassNames={allClassNames} />}
+              {page === "settings" && (
+                <SettingsPage
+                  records={records}
+                  onImport={(next) => updateRecords(next)}
+                  onClearAll={() => updateRecords([])}
+                />
+              )}
+              {page === "detail" && (
+                <ClassDetailPage
+                  className={selectedClassName}
+                  records={records.filter((r) => r.className === selectedClassName).sort((a, b) => a.year - b.year || a.month - b.month)}
+                  onBack={() => setPage("list")}
+                  onEdit={goToEntry}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+/* ============================================================
+   フィルターバー（共通）
+   ============================================================ */
+
+function FilterBar({ filters, setFilters, allClassNames, allInstructors, allFiscalYears, search, setSearch }) {
+  const sel = "text-sm border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500";
+  return (
+    <div className="flex flex-wrap gap-2 items-center bg-white border border-slate-200 rounded-xl p-3">
+      <select className={sel} value={filters.fiscalYear} onChange={(e) => setFilters((f) => ({ ...f, fiscalYear: e.target.value }))}>
+        <option value="all">全年度</option>
+        {allFiscalYears.map((y) => <option key={y} value={y}>{y}年度</option>)}
+      </select>
+      <select className={sel} value={filters.month} onChange={(e) => setFilters((f) => ({ ...f, month: e.target.value }))}>
+        <option value="all">全月</option>
+        {[4,5,6,7,8,9,10,11,12,1,2,3].map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+      </select>
+      <select className={sel} value={filters.category} onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}>
+        <option value="all">全カテゴリ</option>
+        {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+      <select className={sel} value={filters.className} onChange={(e) => setFilters((f) => ({ ...f, className: e.target.value }))}>
+        <option value="all">全教室</option>
+        {allClassNames.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+      <select className={sel} value={filters.instructor} onChange={(e) => setFilters((f) => ({ ...f, instructor: e.target.value }))}>
+        <option value="all">全講師</option>
+        {allInstructors.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+      {setSearch && (
+        <div className="relative flex-1 min-w-[160px]">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            className="w-full text-sm border border-slate-300 rounded-lg pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            placeholder="教室名を検索"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   集計ヘルパー
+   ============================================================ */
+
+function aggregateTotals(list) {
+  const totalRevenue = list.reduce((s, e) => s + calcTotalRevenue(e), 0);
+  const totalExpenses = list.reduce((s, e) => s + calcTotalExpenses(e), 0);
+  const profit = totalRevenue - totalExpenses;
+  const participants = list.reduce((s, e) => s + (Number(e.participants) || 0), 0);
+  const occRates = list.map(calcOccupancy).filter((v) => v !== null);
+  const avgOccupancy = occRates.length ? occRates.reduce((s, v) => s + v, 0) / occRates.length : null;
+  const profitable = list.filter((e) => calcProfit(e) > 0).length;
+  const unprofitable = list.filter((e) => calcProfit(e) < 0).length;
+  const margin = totalRevenue === 0 ? null : (profit / totalRevenue) * 100;
+  return { totalRevenue, totalExpenses, profit, participants, avgOccupancy, profitable, unprofitable, margin };
+}
+
+function groupByClass(list) {
+  const map = new Map();
+  list.forEach((r) => {
+    if (!map.has(r.className)) map.set(r.className, []);
+    map.get(r.className).push(r);
+  });
+  return map;
+}
+
+function latestMonthOf(list) {
+  if (!list.length) return null;
+  return [...list].sort((a, b) => (b.year * 100 + b.month) - (a.year * 100 + a.month))[0];
+}
+
+/* ============================================================
+   ダッシュボード（5〜6章）
+   ============================================================ */
+
+function DashboardPage({ records, filteredRecords, filters, setFilters, allClassNames, allInstructors, allFiscalYears, onSelectClass, onAdd }) {
+  const totals = aggregateTotals(filteredRecords);
+  const byClass = groupByClass(filteredRecords);
+
+  // 前月比較用：フィルターされた月が単一の場合のみ意味を持つが、常に「最新月 vs その前月」で比較する
+  const sortedMonths = Array.from(new Set(filteredRecords.map((r) => r.year * 100 + r.month))).sort((a, b) => b - a);
+  const latestKey = sortedMonths[0];
+  const prevKey = sortedMonths[1];
+  const latestList = filteredRecords.filter((r) => r.year * 100 + r.month === latestKey);
+  const prevList = prevKey ? filteredRecords.filter((r) => r.year * 100 + r.month === prevKey) : [];
+  const latestTotals = latestList.length ? aggregateTotals(latestList) : null;
+  const prevTotals = prevList.length ? aggregateTotals(prevList) : null;
+
+  const rankings = Array.from(byClass.entries()).map(([name, list]) => {
+    const t = aggregateTotals(list);
+    const last = latestMonthOf(list);
+    return { name, ...t, last };
+  });
+  const byProfit = [...rankings].sort((a, b) => b.profit - a.profit);
+  const byRevenue = [...rankings].sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+  const chartData = useMemo(() => {
+    const map = new Map();
+    filteredRecords.forEach((r) => {
+      const key = `${r.year}-${String(r.month).padStart(2, "0")}`;
+      if (!map.has(key)) map.set(key, { key, month: r.month, participants: 0, revenue: 0, profit: 0, occSum: 0, occN: 0 });
+      const row = map.get(key);
+      row.participants += Number(r.participants) || 0;
+      row.revenue += calcTotalRevenue(r);
+      row.profit += calcProfit(r);
+      const occ = calcOccupancy(r);
+      if (occ !== null) { row.occSum += occ; row.occN += 1; }
+    });
+    return Array.from(map.values())
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((r) => ({ ...r, label: monthLabel(r.month), avgOcc: r.occN ? r.occSum / r.occN : null }));
+  }, [filteredRecords]);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">ダッシュボード</h1>
+          <p className="text-sm text-slate-500 mt-0.5">教室事業の収支状況を一目で確認できます。</p>
+        </div>
+        <button onClick={onAdd} className="inline-flex items-center gap-1.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold px-4 py-2 rounded-lg">
+          <PlusCircle size={16} /> データ入力
+        </button>
+      </div>
+
+      <FilterBar filters={filters} setFilters={setFilters} allClassNames={allClassNames} allInstructors={allInstructors} allFiscalYears={allFiscalYears} />
+
+      {filteredRecords.length === 0 ? (
+        <div className="text-center py-16 text-slate-400 text-sm bg-white rounded-xl border border-slate-200">該当するデータがありません。</div>
+      ) : (
+        <>
+          {/* KPIカード */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard label="今月の売上" value={yen(totals.totalRevenue)} icon={TrendingUp} accent="indigo" />
+            <KpiCard label="今月の支出" value={yen(totals.totalExpenses)} icon={TrendingDown} accent="slate" />
+            <KpiCard label="今月の利益" value={yen(totals.profit)} icon={totals.profit >= 0 ? TrendingUp : TrendingDown} accent={totals.profit >= 0 ? "emerald" : "rose"} />
+            <KpiCard label="利益率" value={pct(totals.margin)} icon={BarChart3} accent="amber" />
+            <KpiCard label="総参加人数" value={`${totals.participants.toLocaleString("ja-JP")}人`} icon={ListChecks} accent="indigo" />
+            <KpiCard label="平均定員充足率" value={pct(totals.avgOccupancy)} icon={SlidersHorizontal} accent="slate" />
+            <KpiCard label="黒字教室数" value={`${totals.profitable}教室`} icon={CheckCircle2} accent="emerald" />
+            <KpiCard label="赤字教室数" value={`${totals.unprofitable}教室`} icon={AlertTriangle} accent="rose" />
+          </div>
+
+          {/* 前月比較 */}
+          {latestTotals && prevTotals && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <h2 className="text-sm font-bold text-slate-800 mb-3">前月比較（{monthLabel(latestList[0].month)} と {monthLabel(prevList[0].month)}）</h2>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
+                {[
+                  { label: "売上", cur: latestTotals.totalRevenue, prev: prevTotals.totalRevenue },
+                  { label: "支出", cur: latestTotals.totalExpenses, prev: prevTotals.totalExpenses },
+                  { label: "利益", cur: latestTotals.profit, prev: prevTotals.profit },
+                  { label: "参加人数", cur: latestTotals.participants, prev: prevTotals.participants },
+                ].map((row) => {
+                  const change = row.prev !== 0 ? ((row.cur - row.prev) / Math.abs(row.prev)) * 100 : null;
+                  return (
+                    <div key={row.label} className="flex flex-col items-center gap-1 py-1">
+                      <span className="text-xs text-slate-500">{row.label}</span>
+                      <ChangeTag value={change} />
+                    </div>
+                  );
+                })}
+                <div className="flex flex-col items-center gap-1 py-1">
+                  <span className="text-xs text-slate-500">定員充足率</span>
+                  <ChangeTag value={latestTotals.avgOccupancy !== null && prevTotals.avgOccupancy !== null ? latestTotals.avgOccupancy - prevTotals.avgOccupancy : null} isPoint />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* グラフ */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <ChartCard title="参加人数の推移">
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v) => [`${v}人`, "参加人数"]} />
+                  <Line type="monotone" dataKey="participants" stroke="#0f766e" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+            <ChartCard title="売上の推移">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${Math.round(v/1000)}k`} />
+                  <Tooltip formatter={(v) => [yen(v), "売上"]} />
+                  <Bar dataKey="revenue" fill="#6366f1" radius={[4,4,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+            <ChartCard title="利益の推移">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${Math.round(v/1000)}k`} />
+                  <Tooltip formatter={(v) => [yen(v), "利益"]} />
+                  <ReferenceLine y={0} stroke="#94a3b8" />
+                  <Bar dataKey="profit" radius={[4,4,0,0]}>
+                    {chartData.map((d, i) => <Cell key={i} fill={d.profit >= 0 ? "#10b981" : "#f43f5e"} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+            <ChartCard title="定員充足率の推移">
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} domain={[0, 100]} />
+                  <Tooltip formatter={(v) => [`${v.toFixed(0)}%`, "定員充足率"]} />
+                  <Line type="monotone" dataKey="avgOcc" stroke="#d97706" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </div>
+
+          {/* ランキング */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <RankingCard title="利益ランキング" rows={byProfit} valueFn={(r) => yen(r.profit)} onSelect={onSelectClass} />
+            <RankingCard title="売上ランキング" rows={byRevenue} valueFn={(r) => yen(r.totalRevenue)} onSelect={onSelectClass} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ChartCard({ title, children }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <h3 className="text-sm font-bold text-slate-800 mb-2">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function RankingCard({ title, rows, valueFn, onSelect }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-1.5"><Trophy size={15} className="text-amber-500" />{title}</h3>
+      <div className="flex flex-col divide-y divide-slate-100">
+        {rows.slice(0, 5).map((r, i) => (
+          <button key={r.name} onClick={() => onSelect(r.name)} className="flex items-center justify-between py-2.5 text-left hover:bg-slate-50 -mx-1 px-1 rounded-md">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${i === 0 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>{i+1}</span>
+              <span className="text-sm text-slate-800 truncate">{r.name}</span>
+            </div>
+            <span className="text-sm font-semibold text-slate-900 tabular-nums shrink-0 ml-2">{valueFn(r)}</span>
+          </button>
+        ))}
+        {rows.length === 0 && <div className="text-sm text-slate-400 py-4 text-center">データがありません</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   教室一覧（7章 / 22〜23章）
+   ============================================================ */
+
+function ClassListPage({ filteredRecords, filters, setFilters, search, setSearch, allClassNames, allInstructors, allFiscalYears, onEdit, onDelete, onSelectClass, onAdd }) {
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const sorted = [...filteredRecords].sort((a, b) => (b.year*100+b.month) - (a.year*100+a.month) || a.className.localeCompare(b.className, "ja"));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">教室一覧</h1>
+          <p className="text-sm text-slate-500 mt-0.5">登録済みの教室データ（月別）を確認・編集できます。</p>
+        </div>
+        <button onClick={onAdd} className="inline-flex items-center gap-1.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold px-4 py-2 rounded-lg">
+          <PlusCircle size={16} /> 教室を追加
+        </button>
+      </div>
+
+      <FilterBar filters={filters} setFilters={setFilters} allClassNames={allClassNames} allInstructors={allInstructors} allFiscalYears={allFiscalYears} search={search} setSearch={setSearch} />
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500 text-xs">
+              <tr>
+                <th className="text-left px-4 py-2.5 font-semibold">教室名</th>
+                <th className="text-left px-4 py-2.5 font-semibold">年月</th>
+                <th className="text-left px-4 py-2.5 font-semibold">講師</th>
+                <th className="text-right px-4 py-2.5 font-semibold">参加人数</th>
+                <th className="text-right px-4 py-2.5 font-semibold">充足率</th>
+                <th className="text-right px-4 py-2.5 font-semibold">売上</th>
+                <th className="text-right px-4 py-2.5 font-semibold">利益</th>
+                <th className="text-center px-4 py-2.5 font-semibold">状態</th>
+                <th className="px-4 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {sorted.map((r) => {
+                const occ = calcOccupancy(r);
+                const profit = calcProfit(r);
+                const status = statusOf(r);
+                return (
+                  <tr key={r.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-2.5">
+                      <button className="font-medium text-teal-800 hover:underline text-left" onClick={() => onSelectClass(r.className)}>{r.className}</button>
+                      <div className="text-[11px] text-slate-400">{r.category}</div>
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-600 tabular-nums">{r.year}年{monthLabel(r.month)}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.instructor || "—"}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{r.participants}/{r.capacity}人</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{pct(occ, 0)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{yen(calcTotalRevenue(r))}</td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${profit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{yenSigned(profit)}</td>
+                    <td className="px-4 py-2.5 text-center"><StatusBadge status={status} size="sm" /></td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-1 justify-end">
+                        <button onClick={() => onEdit(r)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="編集"><Pencil size={14} /></button>
+                        <button onClick={() => setConfirmDelete(r)} className="p-1.5 rounded-md hover:bg-rose-50 text-rose-500" title="削除"><Trash2 size={14} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {sorted.length === 0 && (
+                <tr><td colSpan={9} className="text-center text-slate-400 py-10 text-sm">該当するデータがありません。</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {confirmDelete && (
+        <ConfirmModal
+          message="このデータを削除しますか？"
+          detail={`${confirmDelete.className}（${confirmDelete.year}年${monthLabel(confirmDelete.month)}）`}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => { onDelete(confirmDelete.id); setConfirmDelete(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmModal({ message, detail, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="bg-white rounded-xl p-5 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-bold text-slate-900 mb-1">{message}</h3>
+        {detail && <p className="text-sm text-slate-500 mb-4">{detail}</p>}
+        <div className="flex gap-2 justify-end mt-4">
+          <button onClick={onCancel} className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">キャンセル</button>
+          <button onClick={onConfirm} className="px-4 py-2 text-sm font-semibold rounded-lg bg-rose-600 text-white hover:bg-rose-700">削除する</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   データ入力（19章）
+   ============================================================ */
+
+const emptyEntry = () => ({
+  id: uid(), className: "", category: CATEGORIES[0], year: 2026, month: 4, date: "", dayOfWeek: "土",
+  startTime: "10:00", endTime: "11:00", instructor: "", capacity: 10, numberOfSessions: 4,
+  participationFee: 0, participants: 0, otherRevenue: 0,
+  instructorFee: 0, venueCost: 0, materialCost: 0, advertisingCost: 0, equipmentCost: 0, otherExpense: 0,
+  customExpenses: [], notes: "",
+});
+
+function EntryPage({ editingRecord, allClassNames, allInstructors, onCancel, onSave }) {
+  const [form, setForm] = useState(editingRecord || emptyEntry());
+  const [errors, setErrors] = useState({});
+  const [savedMsg, setSavedMsg] = useState(false);
+
+  useEffect(() => { setForm(editingRecord || emptyEntry()); }, [editingRecord]);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const setNum = (k, v) => setForm((f) => ({ ...f, [k]: v === "" ? "" : Number(v) }));
+
+  const addCustomExpense = () => setForm((f) => ({ ...f, customExpenses: [...(f.customExpenses||[]), { id: uid(), label: "", amount: 0 }] }));
+  const updateCustomExpense = (id, patch) => setForm((f) => ({ ...f, customExpenses: f.customExpenses.map((c) => c.id === id ? { ...c, ...patch } : c) }));
+  const removeCustomExpense = (id) => setForm((f) => ({ ...f, customExpenses: f.customExpenses.filter((c) => c.id !== id) }));
+
+  const validate = () => {
+    const e = {};
+    if (!form.className || !form.className.trim()) e.className = "教室名を入力してください。";
+    if (!form.instructor || !form.instructor.trim()) e.instructor = "講師名を入力してください。";
+    if (form.capacity === "" || Number(form.capacity) < 0) e.capacity = "定員は0以上の数字を入力してください。";
+    if (form.participants === "" || Number(form.participants) < 0) e.participants = "参加人数は0以上の数字を入力してください。";
+    if (form.participationFee === "" || Number(form.participationFee) < 0) e.participationFee = "参加費は0以上の数字を入力してください。";
+    if (!form.year || Number(form.year) < 2000) e.year = "年を入力してください。";
+    if (!form.month || Number(form.month) < 1 || Number(form.month) > 12) e.month = "月は1〜12の数字を入力してください。";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = () => {
+    if (!validate()) return;
+    onSave(form);
+  };
+
+  const previewRevenue = calcTotalRevenue(form);
+  const previewExpenses = calcTotalExpenses(form);
+  const previewProfit = previewRevenue - previewExpenses;
+
+  return (
+    <div className="flex flex-col gap-5 pb-10">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">{editingRecord ? "教室データを編集" : "教室を追加"}</h1>
+        <p className="text-sm text-slate-500 mt-0.5">1教室・1ヶ月分のデータを入力してください。</p>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 flex flex-col gap-4">
+          <SectionCard title="基本情報">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="教室名" required error={errors.className}>
+                <input list="classNameList" className={inputCls} value={form.className} onChange={(e) => set("className", e.target.value)} placeholder="例：フットサル教室" />
+                <datalist id="classNameList">{allClassNames.map((n) => <option key={n} value={n} />)}</datalist>
+              </Field>
+              <Field label="カテゴリ">
+                <select className={inputCls} value={form.category} onChange={(e) => set("category", e.target.value)}>
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="年" required error={errors.year}>
+                <input type="number" className={inputCls} value={form.year} onChange={(e) => setNum("year", e.target.value)} />
+              </Field>
+              <Field label="月" required error={errors.month}>
+                <select className={inputCls} value={form.month} onChange={(e) => setNum("month", e.target.value)}>
+                  {[4,5,6,7,8,9,10,11,12,1,2,3].map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+                </select>
+              </Field>
+              <Field label="講師" required error={errors.instructor}>
+                <input list="instructorList" className={inputCls} value={form.instructor} onChange={(e) => set("instructor", e.target.value)} placeholder="例：田中コーチ" />
+                <datalist id="instructorList">{allInstructors.map((n) => <option key={n} value={n} />)}</datalist>
+              </Field>
+              <Field label="開催回数">
+                <input type="number" min="0" className={inputCls} value={form.numberOfSessions} onChange={(e) => setNum("numberOfSessions", e.target.value)} />
+              </Field>
+              <Field label="曜日">
+                <select className={inputCls} value={form.dayOfWeek} onChange={(e) => set("dayOfWeek", e.target.value)}>
+                  {["月","火","水","木","金","土","日"].map((d) => <option key={d} value={d}>{d}曜日</option>)}
+                </select>
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="開始時刻">
+                  <input type="time" className={inputCls} value={form.startTime} onChange={(e) => set("startTime", e.target.value)} />
+                </Field>
+                <Field label="終了時刻">
+                  <input type="time" className={inputCls} value={form.endTime} onChange={(e) => set("endTime", e.target.value)} />
+                </Field>
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="参加・収入">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="定員" required error={errors.capacity}>
+                <input type="number" min="0" className={inputCls} value={form.capacity} onChange={(e) => setNum("capacity", e.target.value)} />
+              </Field>
+              <Field label="参加人数" required error={errors.participants}>
+                <input type="number" min="0" className={inputCls} value={form.participants} onChange={(e) => setNum("participants", e.target.value)} />
+              </Field>
+              <Field label="参加費（1人あたり）" required error={errors.participationFee}>
+                <input type="number" min="0" className={inputCls} value={form.participationFee} onChange={(e) => setNum("participationFee", e.target.value)} />
+              </Field>
+              <Field label="その他収入">
+                <input type="number" min="0" className={inputCls} value={form.otherRevenue} onChange={(e) => setNum("otherRevenue", e.target.value)} />
+              </Field>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="支出">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="講師謝金"><input type="number" min="0" className={inputCls} value={form.instructorFee} onChange={(e) => setNum("instructorFee", e.target.value)} /></Field>
+              <Field label="会場費"><input type="number" min="0" className={inputCls} value={form.venueCost} onChange={(e) => setNum("venueCost", e.target.value)} /></Field>
+              <Field label="教材費"><input type="number" min="0" className={inputCls} value={form.materialCost} onChange={(e) => setNum("materialCost", e.target.value)} /></Field>
+              <Field label="広告費"><input type="number" min="0" className={inputCls} value={form.advertisingCost} onChange={(e) => setNum("advertisingCost", e.target.value)} /></Field>
+              <Field label="備品費"><input type="number" min="0" className={inputCls} value={form.equipmentCost} onChange={(e) => setNum("equipmentCost", e.target.value)} /></Field>
+              <Field label="その他経費"><input type="number" min="0" className={inputCls} value={form.otherExpense} onChange={(e) => setNum("otherExpense", e.target.value)} /></Field>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2">
+              {(form.customExpenses || []).map((c) => (
+                <div key={c.id} className="flex gap-2 items-center">
+                  <input className={inputCls} placeholder="経費項目名" value={c.label} onChange={(e) => updateCustomExpense(c.id, { label: e.target.value })} />
+                  <input type="number" min="0" className={inputCls + " max-w-[140px]"} placeholder="金額" value={c.amount} onChange={(e) => updateCustomExpense(c.id, { amount: Number(e.target.value) })} />
+                  <button onClick={() => removeCustomExpense(c.id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-md shrink-0"><X size={16} /></button>
+                </div>
+              ))}
+              <button onClick={addCustomExpense} className="self-start text-xs font-semibold text-teal-700 hover:underline mt-1">+ 経費項目を追加</button>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="備考">
+            <textarea className={inputCls + " min-h-[80px]"} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="任意メモ" />
+          </SectionCard>
+        </div>
+
+        {/* プレビュー */}
+        <div className="flex flex-col gap-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 sticky top-4">
+            <h3 className="text-sm font-bold text-slate-800 mb-3">プレビュー</h3>
+            <div className="flex flex-col gap-2 text-sm">
+              <Row label="売上" value={yen(previewRevenue)} />
+              <Row label="支出" value={yen(previewExpenses)} />
+              <Row label="利益" value={yenSigned(previewProfit)} strong color={previewProfit >= 0 ? "emerald" : "rose"} />
+              <Row label="利益率" value={pct(calcProfitMargin(form))} />
+              <Row label="定員充足率" value={pct(calcOccupancy(form))} />
+              <div className="pt-2 mt-1 border-t border-slate-100">
+                <StatusBadge status={statusOf(form)} />
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button onClick={handleSubmit} className="bg-teal-700 hover:bg-teal-800 text-white font-semibold text-sm rounded-lg py-2.5">データを保存</button>
+            <button onClick={onCancel} className="border border-slate-300 text-slate-600 font-medium text-sm rounded-lg py-2.5 hover:bg-slate-50">キャンセル</button>
+            {savedMsg && <div className="text-emerald-600 text-xs font-medium text-center">データを保存しました。</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionCard({ title, children }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <h3 className="text-sm font-bold text-slate-800 mb-3">{title}</h3>
+      {children}
+    </div>
+  );
+}
+function Row({ label, value, strong, color }) {
+  const colorCls = color === "emerald" ? "text-emerald-700" : color === "rose" ? "text-rose-700" : "text-slate-900";
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-slate-500">{label}</span>
+      <span className={`tabular-nums ${strong ? "font-bold text-base" : "font-medium"} ${colorCls}`}>{value}</span>
+    </div>
+  );
+}
+
+/* ============================================================
+   分析ページ（10〜15章）
+   ============================================================ */
+
+function AnalysisPage({ records, filteredRecords, filters, setFilters, allClassNames, allInstructors, allFiscalYears }) {
+  const byClass = groupByClass(filteredRecords);
+  const monthKeys = Array.from(new Set(filteredRecords.map((r) => r.year * 100 + r.month))).sort((a, b) => a - b);
+
+  const analysisItems = [];
+  const improvementItems = [];
+
+  byClass.forEach((list, name) => {
+    const sorted = [...list].sort((a, b) => (a.year*100+a.month) - (b.year*100+b.month));
+    const latest = sorted[sorted.length - 1];
+    const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
+    if (!latest) return;
+    analysisItems.push(...buildAutoAnalysis(records, latest, prev));
+
+    // 継続減少の判定
+    let streak = 0;
+    for (let i = sorted.length - 1; i > 0; i--) {
+      if ((Number(sorted[i].participants)||0) < (Number(sorted[i-1].participants)||0)) streak++;
+      else break;
+    }
+    improvementItems.push({ name, points: buildImprovementPoints(latest, streak) });
+  });
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">分析</h1>
+        <p className="text-sm text-slate-500 mt-0.5">教室ごとのランキング・自動分析・改善ポイントを確認できます。</p>
+      </div>
+      <FilterBar filters={filters} setFilters={setFilters} allClassNames={allClassNames} allInstructors={allInstructors} allFiscalYears={allFiscalYears} />
+
+      {/* ランキング4種 */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <RankingFull title="売上ランキング" byClass={byClass} keyFn={(t) => t.totalRevenue} fmt={yen} />
+        <RankingFull title="利益ランキング" byClass={byClass} keyFn={(t) => t.profit} fmt={yenSigned} />
+        <RankingFull title="参加人数ランキング" byClass={byClass} keyFn={(t) => t.participants} fmt={(v) => `${v}人`} />
+        <RankingFull title="定員充足率ランキング" byClass={byClass} keyFn={(t) => t.avgOccupancy ?? -1} fmt={(v) => pct(v)} />
+      </div>
+
+      {/* 自動分析 */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-1.5"><Sparkles size={15} className="text-indigo-500" />自動分析コメント</h3>
+        {analysisItems.length === 0 ? (
+          <div className="text-sm text-slate-400 py-4 text-center">特筆すべき変化は検出されませんでした。</div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {analysisItems.map((t, i) => (
+              <li key={i} className="text-sm text-slate-700 bg-indigo-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                <Info size={14} className="text-indigo-500 mt-0.5 shrink-0" /> {t}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* 改善ポイント */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="text-sm font-bold text-slate-800 mb-3">改善ポイント</h3>
+        <div className="flex flex-col gap-3">
+          {improvementItems.filter((i) => i.points.length > 0).map((item) => (
+            <div key={item.name} className="border border-slate-100 rounded-lg p-3">
+              <div className="text-sm font-semibold text-slate-800 mb-1.5">{item.name}</div>
+              <ul className="flex flex-col gap-1.5">
+                {item.points.map((p, i) => (
+                  <li key={i} className={`text-xs rounded-md px-2.5 py-1.5 flex items-start gap-1.5 ${
+                    p.type === "good" ? "bg-emerald-50 text-emerald-700" : p.type === "bad" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"
+                  }`}>
+                    {p.type === "good" ? <CheckCircle2 size={13} className="mt-0.5 shrink-0" /> : <AlertTriangle size={13} className="mt-0.5 shrink-0" />}
+                    {p.text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {improvementItems.every((i) => i.points.length === 0) && (
+            <div className="text-sm text-slate-400 py-4 text-center">現時点で改善提案はありません。</div>
+          )}
+        </div>
+        <p className="text-[11px] text-slate-400 mt-3">※ これらは参考提案であり、断定的な結論ではありません。</p>
+      </div>
+    </div>
+  );
+}
+
+function RankingFull({ title, byClass, keyFn, fmt }) {
+  const rows = Array.from(byClass.entries()).map(([name, list]) => ({ name, t: aggregateTotals(list) }))
+    .sort((a, b) => keyFn(b.t) - keyFn(a.t));
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4">
+      <h3 className="text-sm font-bold text-slate-800 mb-3">{title}</h3>
+      <div className="flex flex-col divide-y divide-slate-100">
+        {rows.map((r, i) => (
+          <div key={r.name} className="flex items-center justify-between py-2 text-sm">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-bold text-slate-400 w-5">{i+1}位</span>
+              <span className="truncate text-slate-800">{r.name}</span>
+            </div>
+            <span className="font-semibold tabular-nums text-slate-900 shrink-0">{fmt(keyFn(r.t))}</span>
+          </div>
+        ))}
+        {rows.length === 0 && <div className="text-sm text-slate-400 py-4 text-center">データがありません</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   教室詳細ページ（12章）
+   ============================================================ */
+
+function ClassDetailPage({ className, records, onBack, onEdit }) {
+  if (!className || records.length === 0) {
+    return (
+      <div className="flex flex-col gap-4">
+        <button onClick={onBack} className="text-sm text-teal-700 font-medium flex items-center gap-1"><ChevronRight className="rotate-180" size={14} />一覧に戻る</button>
+        <div className="text-sm text-slate-400">データが見つかりませんでした。</div>
+      </div>
+    );
+  }
+  const latest = records[records.length - 1];
+  const be = calcBreakEven(latest);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <button onClick={onBack} className="text-sm text-teal-700 font-medium flex items-center gap-1 w-fit"><ChevronRight className="rotate-180" size={14} />一覧に戻る</button>
+
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">{className}</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{latest.category} ・ 講師：{latest.instructor} ・ 定員：{latest.capacity}人</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={statusOf(latest)} />
+          <button onClick={() => onEdit(latest)} className="inline-flex items-center gap-1.5 border border-slate-300 text-slate-600 text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-slate-50"><Pencil size={14} />最新月を編集</button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="直近の参加人数" value={`${latest.participants}人`} sub={`定員 ${latest.capacity}人`} />
+        <KpiCard label="直近の定員充足率" value={pct(calcOccupancy(latest))} />
+        <KpiCard label="直近の売上" value={yen(calcTotalRevenue(latest))} />
+        <KpiCard label="直近の利益" value={yenSigned(calcProfit(latest))} accent={calcProfit(latest) >= 0 ? "emerald" : "rose"} />
+      </div>
+
+      {/* 損益分岐点 */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="text-sm font-bold text-slate-800 mb-3">損益分岐点分析</h3>
+        <div className="text-sm text-slate-700 flex flex-col gap-1.5">
+          <div>現在の参加人数：<b className="tabular-nums">{latest.participants}人</b></div>
+          {be.status === "already" && <div className="text-emerald-700 font-semibold">現在黒字です</div>}
+          {be.status === "impossible" && <div className="text-rose-700 font-semibold">定員内では黒字化できません（黒字化に必要：{be.needed}人）</div>}
+          {be.status === "needed" && (
+            <>
+              <div>黒字化に必要な参加人数：<b className="tabular-nums">{be.needed}人</b></div>
+              <div className="text-amber-700 font-semibold">あと{be.gap}人で黒字化</div>
+            </>
+          )}
+          {be.status === "unknown" && <div className="text-slate-400">参加費が設定されていないため算出できません。</div>}
+        </div>
+      </div>
+
+      {/* 月次推移 */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <h3 className="text-sm font-bold text-slate-800 p-4 pb-0">月次推移</h3>
+        <div className="overflow-x-auto mt-3">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500 text-xs">
+              <tr>
+                <th className="text-left px-4 py-2">年月</th>
+                <th className="text-right px-4 py-2">参加人数</th>
+                <th className="text-right px-4 py-2">充足率</th>
+                <th className="text-right px-4 py-2">売上</th>
+                <th className="text-right px-4 py-2">利益</th>
+                <th className="text-center px-4 py-2">状態</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {records.map((r) => (
+                <tr key={r.id}>
+                  <td className="px-4 py-2 tabular-nums">{r.year}年{monthLabel(r.month)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{r.participants}人</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{pct(calcOccupancy(r), 0)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{yen(calcTotalRevenue(r))}</td>
+                  <td className={`px-4 py-2 text-right tabular-nums font-semibold ${calcProfit(r) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{yenSigned(calcProfit(r))}</td>
+                  <td className="px-4 py-2 text-center"><StatusBadge status={statusOf(r)} size="sm" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <ChartCard title="参加人数の推移">
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={records.map((r) => ({ label: monthLabel(r.month), v: r.participants }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Line type="monotone" dataKey="v" stroke="#0f766e" strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartCard>
+        <ChartCard title="利益の推移">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={records.map((r) => ({ label: monthLabel(r.month), v: calcProfit(r) }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip formatter={(v) => yen(v)} />
+              <ReferenceLine y={0} stroke="#94a3b8" />
+              <Bar dataKey="v" radius={[4,4,0,0]}>
+                {records.map((r, i) => <Cell key={i} fill={calcProfit(r) >= 0 ? "#10b981" : "#f43f5e"} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   シミュレーション（16〜17章）
+   ============================================================ */
+
+function SimulationPage({ records, allClassNames }) {
+  const [targetClass, setTargetClass] = useState(allClassNames[0] || "");
+  const baseRecord = useMemo(() => {
+    const list = records.filter((r) => r.className === targetClass).sort((a,b) => (b.year*100+b.month)-(a.year*100+a.month));
+    return list[0] || null;
+  }, [records, targetClass]);
+
+  const [sim, setSim] = useState({ participants: 0, participationFee: 0, instructorFee: 0, otherExpense: 0 });
+
+  useEffect(() => {
+    if (baseRecord) {
+      setSim({
+        participants: baseRecord.participants,
+        participationFee: baseRecord.participationFee,
+        instructorFee: baseRecord.instructorFee,
+        otherExpense: calcTotalExpenses(baseRecord) - baseRecord.instructorFee,
+      });
+    }
+  }, [baseRecord]);
+
+  const [scenarios, setScenarios] = useState([]);
+
+  if (!baseRecord) {
+    return <div className="text-sm text-slate-400">シミュレーションには少なくとも1件のデータが必要です。</div>;
+  }
+
+  const simEntry = {
+    ...baseRecord,
+    participants: Number(sim.participants) || 0,
+    participationFee: Number(sim.participationFee) || 0,
+    instructorFee: Number(sim.instructorFee) || 0,
+    venueCost: baseRecord.venueCost, materialCost: baseRecord.materialCost, advertisingCost: baseRecord.advertisingCost, equipmentCost: baseRecord.equipmentCost,
+    otherExpense: Number(sim.otherExpense) || 0,
+    customExpenses: [],
+  };
+
+  const curRevenue = calcTotalRevenue(baseRecord);
+  const curExpenses = calcTotalExpenses(baseRecord);
+  const curProfit = curRevenue - curExpenses;
+
+  const simRevenue = calcTotalRevenue(simEntry);
+  const simExpenses = calcTotalExpenses(simEntry);
+  const simProfit = simRevenue - simExpenses;
+  const diff = simProfit - curProfit;
+  const participantDiff = simEntry.participants - baseRecord.participants;
+
+  const saveScenario = () => {
+    setScenarios((s) => [...s, {
+      id: uid(), label: `案${String.fromCharCode(65 + s.length)}`,
+      participants: simEntry.participants, participationFee: simEntry.participationFee,
+      profit: simProfit, revenue: simRevenue, expenses: simExpenses,
+    }]);
+  };
+
+  const num = "w-full accent-teal-700";
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">収益シミュレーション</h1>
+        <p className="text-sm text-slate-500 mt-0.5">参加人数・参加費・経費を変えたときの収支をリアルタイムに試算します。</p>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-slate-600">対象教室：</span>
+        <select className={inputCls + " max-w-xs"} value={targetClass} onChange={(e) => setTargetClass(e.target.value)}>
+          {allClassNames.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-4">
+          <h3 className="text-sm font-bold text-slate-800">条件を変更</h3>
+          <div className="flex flex-col gap-3">
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1"><span>想定参加人数</span><span className="font-semibold text-slate-800 tabular-nums">{sim.participants}人</span></div>
+              <input type="range" min="0" max={Math.max(baseRecord.capacity * 1.2, 10)} className={num} value={sim.participants} onChange={(e) => setSim((s) => ({ ...s, participants: Number(e.target.value) }))} />
+            </div>
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1"><span>参加費</span><span className="font-semibold text-slate-800 tabular-nums">{yen(sim.participationFee)}</span></div>
+              <input type="range" min="0" max={Math.max(baseRecord.participationFee * 2, 1000)} step="100" className={num} value={sim.participationFee} onChange={(e) => setSim((s) => ({ ...s, participationFee: Number(e.target.value) }))} />
+            </div>
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1"><span>講師謝金</span><span className="font-semibold text-slate-800 tabular-nums">{yen(sim.instructorFee)}</span></div>
+              <input type="range" min="0" max={Math.max(baseRecord.instructorFee * 2, 5000)} step="500" className={num} value={sim.instructorFee} onChange={(e) => setSim((s) => ({ ...s, instructorFee: Number(e.target.value) }))} />
+            </div>
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1"><span>その他経費（会場費等含む）</span><span className="font-semibold text-slate-800 tabular-nums">{yen(sim.otherExpense)}</span></div>
+              <input type="range" min="0" max={Math.max(sim.otherExpense * 2, 5000)} step="500" className={num} value={sim.otherExpense} onChange={(e) => setSim((s) => ({ ...s, otherExpense: Number(e.target.value) }))} />
+            </div>
+          </div>
+          <button onClick={saveScenario} className="self-start text-xs font-semibold text-teal-700 hover:underline">この条件をシナリオとして保存</button>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-4">
+          <h3 className="text-sm font-bold text-slate-800">試算結果</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <MiniCompare label="売上" cur={curRevenue} sim={simRevenue} fmt={yen} />
+            <MiniCompare label="支出" cur={curExpenses} sim={simExpenses} fmt={yen} />
+            <MiniCompare label="利益" cur={curProfit} sim={simProfit} fmt={yenSigned} />
+            <MiniCompare label="利益率" cur={calcProfitMargin(baseRecord)} sim={calcProfitMargin(simEntry)} fmt={pct} />
+          </div>
+          <div className={`rounded-lg px-3 py-3 text-sm font-medium ${diff >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
+            {participantDiff !== 0
+              ? `参加者を${participantDiff > 0 ? participantDiff + "人増やす" : Math.abs(participantDiff) + "人減らす"}と、利益が${diff >= 0 ? Math.abs(diff).toLocaleString("ja-JP") + "円改善" : Math.abs(diff).toLocaleString("ja-JP") + "円悪化"}します。`
+              : `現在の条件からの利益変化：${yenSigned(diff)}`}
+          </div>
+        </div>
+      </div>
+
+      {scenarios.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <h3 className="text-sm font-bold text-slate-800 mb-3">シナリオ比較</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-slate-500 text-xs">
+                <tr>
+                  <th className="text-left px-3 py-2">シナリオ</th>
+                  <th className="text-right px-3 py-2">参加人数</th>
+                  <th className="text-right px-3 py-2">参加費</th>
+                  <th className="text-right px-3 py-2">売上</th>
+                  <th className="text-right px-3 py-2">利益</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                <tr className="bg-slate-50 font-medium">
+                  <td className="px-3 py-2">現状</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{baseRecord.participants}人</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{yen(baseRecord.participationFee)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{yen(curRevenue)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${curProfit>=0?"text-emerald-700":"text-rose-700"}`}>{yenSigned(curProfit)}</td>
+                  <td></td>
+                </tr>
+                {scenarios.map((s) => (
+                  <tr key={s.id}>
+                    <td className="px-3 py-2">{s.label}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{s.participants}人</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{yen(s.participationFee)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{yen(s.revenue)}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-semibold ${s.profit>=0?"text-emerald-700":"text-rose-700"}`}>{yenSigned(s.profit)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button onClick={() => setScenarios((arr) => arr.filter((x) => x.id !== s.id))} className="text-slate-400 hover:text-rose-500"><X size={14} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniCompare({ label, cur, sim, fmt }) {
+  return (
+    <div className="rounded-lg bg-slate-50 p-3">
+      <div className="text-xs text-slate-500 mb-1">{label}</div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[11px] text-slate-400 line-through tabular-nums">{fmt(cur)}</span>
+        <span className="text-sm font-bold text-slate-900 tabular-nums">{fmt(sim)}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   設定（CSVインポート/エクスポート・20〜21章）
+   ============================================================ */
+
+const CSV_HEADERS = [
+  "className","category","year","month","instructor","capacity","numberOfSessions",
+  "participationFee","participants","otherRevenue",
+  "instructorFee","venueCost","materialCost","advertisingCost","equipmentCost","otherExpense","notes",
+];
+
+function toCsv(records) {
+  const lines = [CSV_HEADERS.join(",")];
+  records.forEach((r) => {
+    const row = CSV_HEADERS.map((h) => {
+      let v = r[h] ?? "";
+      v = String(v).replace(/"/g, '""');
+      if (v.includes(",") || v.includes("\n")) v = `"${v}"`;
+      return v;
+    });
+    lines.push(row.join(","));
+  });
+  return lines.join("\n");
+}
+
+function parseCsv(text) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length === 0) return { rows: [], errors: ["ファイルが空です。"] };
+  const headers = lines[0].split(",").map((h) => h.trim());
+  const rows = [];
+  const errors = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",");
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = (cols[idx] ?? "").trim(); });
+    if (!obj.className) { errors.push(`${i + 1}行目：教室名が空です。`); continue; }
+    const participants = Number(obj.participants);
+    if (obj.participants !== undefined && (Number.isNaN(participants) || participants < 0)) {
+      errors.push(`${i + 1}行目の参加人数が不正です。`); continue;
+    }
+    const capacity = Number(obj.capacity || 0);
+    if (Number.isNaN(capacity) || capacity < 0) { errors.push(`${i + 1}行目の定員が不正です。`); continue; }
+    rows.push({
+      id: uid(),
+      className: obj.className, category: obj.category || "その他",
+      year: Number(obj.year) || 2026, month: Number(obj.month) || 4,
+      instructor: obj.instructor || "", capacity, numberOfSessions: Number(obj.numberOfSessions) || 0,
+      date: "", dayOfWeek: "土", startTime: "10:00", endTime: "11:00",
+      participationFee: Number(obj.participationFee) || 0, participants,
+      otherRevenue: Number(obj.otherRevenue) || 0,
+      instructorFee: Number(obj.instructorFee) || 0, venueCost: Number(obj.venueCost) || 0,
+      materialCost: Number(obj.materialCost) || 0, advertisingCost: Number(obj.advertisingCost) || 0,
+      equipmentCost: Number(obj.equipmentCost) || 0, otherExpense: Number(obj.otherExpense) || 0,
+      customExpenses: [], notes: obj.notes || "",
+    });
+  }
+  return { rows, errors };
+}
+
+function SettingsPage({ records, onImport, onClearAll }) {
+  const [importErrors, setImportErrors] = useState([]);
+  const [importSuccess, setImportSuccess] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const handleExport = () => {
+    const csv = toCsv(records);
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `教室データ_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSampleDownload = () => {
+    const sampleCsv = CSV_HEADERS.join(",") + "\n" +
+      "フットサル教室,スポーツ教室,2026,4,田中コーチ,20,4,3000,12,0,8000,6000,0,0,0,0,サンプルデータ";
+    const blob = new Blob(["\uFEFF" + sampleCsv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "サンプルフォーマット.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFile = (file) => {
+    setImportErrors([]); setImportSuccess(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { rows, errors } = parseCsv(String(reader.result));
+      if (rows.length > 0) {
+        onImport((prev) => [...prev, ...rows]);
+        setImportSuccess(`${rows.length}件のデータを取り込みました。`);
+      }
+      if (errors.length > 0) setImportErrors(errors);
+    };
+    reader.readAsText(file, "UTF-8");
+  };
+
+  return (
+    <div className="flex flex-col gap-5 max-w-2xl">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">設定</h1>
+        <p className="text-sm text-slate-500 mt-0.5">データのエクスポート・インポート、その他の設定を行います。</p>
+      </div>
+
+      <SectionCard title="CSVエクスポート">
+        <p className="text-sm text-slate-500 mb-3">登録されている全教室データをCSV形式でダウンロードします。</p>
+        <button onClick={handleExport} className="inline-flex items-center gap-1.5 bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold px-4 py-2 rounded-lg">
+          <Download size={15} /> CSVエクスポート
+        </button>
+      </SectionCard>
+
+      <SectionCard title="CSVインポート">
+        <p className="text-sm text-slate-500 mb-3">CSVファイルから教室データを取り込みます。既存データに追加されます。</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="inline-flex items-center gap-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold px-4 py-2 rounded-lg cursor-pointer">
+            <Upload size={15} /> ファイルを選択
+            <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])} />
+          </label>
+          <button onClick={handleSampleDownload} className="text-xs font-semibold text-teal-700 hover:underline">サンプルフォーマットをダウンロード</button>
+        </div>
+        {importSuccess && <div className="mt-3 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{importSuccess}</div>}
+        {importErrors.length > 0 && (
+          <div className="mt-3 text-sm text-rose-700 bg-rose-50 rounded-lg px-3 py-2 flex flex-col gap-1">
+            {importErrors.map((e, i) => <div key={i}>{e}</div>)}
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard title="データ管理">
+        <p className="text-sm text-slate-500 mb-3">現在 {records.length} 件のデータが登録されています。</p>
+        <button onClick={() => setConfirmClear(true)} className="inline-flex items-center gap-1.5 border border-rose-300 text-rose-600 hover:bg-rose-50 text-sm font-semibold px-4 py-2 rounded-lg">
+          <Trash2 size={15} /> 全データを削除
+        </button>
+      </SectionCard>
+
+      {confirmClear && (
+        <ConfirmModal
+          message="すべてのデータを削除しますか？"
+          detail="この操作は取り消せません。"
+          onCancel={() => setConfirmClear(false)}
+          onConfirm={() => { onClearAll(); setConfirmClear(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+
+</script>
+
+<script>
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      const s = document.getElementById("splash");
+      if (s) s.classList.add("hide");
+      setTimeout(() => s && s.remove(), 400);
+    }, 300);
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./service-worker.js").catch((err) => {
+        console.warn("Service worker registration failed:", err);
+      });
+    }
+  });
+</script>
+</body>
+</html>
